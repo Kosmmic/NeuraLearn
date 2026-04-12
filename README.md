@@ -1,14 +1,31 @@
 # Projekt: System nauki fiszek (Spaced Repetition)
 
 ## Opis
-    Projekt realizuje plan stworzneia narzędzia wspierającego proces nauki , z wykorzystaniem programowania obiektowego. Wstępnie materiał będzie realizowany w postaci fiszek oraz nauki słówek. Program zakłada zbieranie metadanych sesji użytkownika w celu budowy sieci algorytmów ewaluacyjnych oraz predykcyjnych dla techniki spaced repetition.
+Projekt realizuje plan stworzneia narzędzia wspierającego proces nauki , z wykorzystaniem programowania obiektowego. Wstępnie materiał będzie realizowany w postaci fiszek oraz nauki słówek. Program zakłada zbieranie metadanych sesji użytkownika w celu budowy sieci algorytmów ewaluacyjnych oraz predykcyjnych dla techniki spaced repetition.
 
 ## Techstack
 - **Język:** Python
 - **ORM:** SQLAlchemy 2.x, SQLite — plik bazy memory.db w katalogu projektu (tworzony przy pracy aplikacji; nie commituje się do repo).
 
+## Struktura katalogów i plików
+```
+| Ścieżka | Opis |
+|:--------|:-----|
+| `main.py` | Punkt wejścia aplikacji CLI |
+| `cli.py` | Menu tekstowe i obsługa poleceń użytkownika |
+| `models.py` | Definicje tabel SQLAlchemy oraz silnik SQLite (`memory.db`) |
+| `db_crud.py` | Wspólna klasa `BaseCRUD` i klasy CRUD dla encji |
+| `requirements.txt` | Zależności projektu |
+| `pytest.ini` | Konfiguracja pytest (`testpaths`, `pythonpath`) |
+| `tests/test_smoke.py` | Pliki testów |
+| `.vscode/settings.json` | Ustawienia workspace (np. uruchamianie pytest) |
+| `.gitignore` | Reguły ignorowania plików dla Gita |
+```
+
 ## Plan funkcjonalny: sesja treningowa
-Poniższy diagram opisuje **zamierzony przepływ nauki** (logika produktu), a nie dokładny stan tabel w SQLite. Szczegóły wdrożenia są w `models.py`.
+
+Poniższy diagram opisuje mierzalny proces nauki (logika produktu), a nie dokładny stan tabel w SQLite. Szczegóły wdrożenia są w `models.py`.
+
 ```mermaid
 flowchart TB
     subgraph przygotowanie["Przygotowanie zestawu"]
@@ -42,21 +59,9 @@ flowchart TB
     S_log --> DB_log
     S_prog --> DB_pr
     S_end --> DB_sess
-
-## Struktura katalogów i plików
-| Ścieżka | Opis |
-|:--------|:-----|
-| `main.py` | Punkt wejścia aplikacji CLI |
-| `cli.py` | Menu tekstowe i obsługa poleceń użytkownika |
-| `models.py` | Definicje tabel SQLAlchemy oraz silnik SQLite (`memory.db`) |
-| `db_crud.py` | Wspólna klasa `BaseCRUD` i klasy CRUD dla encji |
-| `requirements.txt` | Zależności projektu |
-| `pytest.ini` | Konfiguracja pytest (`testpaths`, `pythonpath`) |
-| `tests/test_smoke.py` | Pliki testów |
-| `.vscode/settings.json` | Ustawienia workspace (np. uruchamianie pytest) |
-| `.gitignore` | Reguły ignorowania plików dla Gita |
-
+```
 ## Architektura bazy danych
+
 ```mermaid
 erDiagram
     USER ||--o{ SESSION : "rozpoczyna"
@@ -133,10 +138,7 @@ erDiagram
     }
 ```
 
-
-    Projekt zakłada modułową budowę, która pozwala na utrzymanie czystego kodu oraz łatwą rozbudowę. 
-
-    Baza danych jest przechowywana w pliku models.py z uzyciem SQLite
+Projekt zakłada modułową budowę, która pozwala na utrzymanie czystego kodu oraz łatwą rozbudowę. 
 
 ## Nazwy tabel w SQLite (mapowanie)
 
@@ -154,30 +156,33 @@ erDiagram
 
 ## Instalacja zależnosci
 
+```bash
    python -m venv .venv
    .\.venv\Scripts\activate
    pip install -r requirements.txt
-
+```
 ## Jak uruchomić?
+
 Program:
-
+    ```bash
     python main.py
-
+    ```
 Testy:
-
+    ```bash
     python -m pytest
     work in progress...
+    ```
 
 ## Funkcjonalności:
 
-    zunifikowany system wyświetlania menu CLI, trzy menu kontekstowe:
-        CLI menu główne
-        CLI crud użytkowników
-        CLI crud fiszek
-    systemy CRUD do obsługi bazy danych:
-        CRUD użytkowników
-        CRUD fiszek
-        przygotowano klasy CRUD dla postepu, sesji, logow, tagow i list bez pelnego menu CLI
+zunifikowany system wyświetlania menu CLI, trzy menu kontekstowe:
+    CLI menu główne
+    CLI crud użytkowników
+    CLI crud fiszek
+systemy CRUD do obsługi bazy danych:
+    CRUD użytkowników
+    CRUD fiszek
+    przygotowano klasy CRUD dla postepu, sesji, logow, tagow i list bez pelnego menu CLI
 
     work in progress...
 
