@@ -98,7 +98,7 @@ class UserCRUD(BaseCRUD[User]):
         super().__init__(session, User)
 
 
-class ProgresCRUD(BaseCRUD[Progress]):
+class ProgressCRUD(BaseCRUD[Progress]):
     def __init__(self, session: Session):
         super().__init__(session, Progress)
 
