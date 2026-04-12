@@ -1,144 +1,131 @@
-from models import Fiszka, User
+from typing import Generic, Type, TypeVar, Union
+
+from sqlalchemy.orm import Session
+
+from models import Fiszka, User, Progress, TrainingSession, ReviewLogs, Tag, Lists, Tag_lists, Fish_lists
+
+from datetime import datetime
+
+T = TypeVar("T")
 
 
-class FiszkaCRUD:
-    def __init__(self, session):
+class BaseCRUD(Generic[T]):
+
+    def __init__(self, session: Session, model: Type[T]):
         self.session = session
+        self.model = model
 
-    def wypisz_fiszki(self):
-        fiszki = self.session.query(Fiszka).all()
-        print("All Fiszki:")
-        for f in fiszki:
-            print(f)
+    def wypisz_wszystkie(self):
+        records = self.session.query(self.model).all()
+        print(f"All {self.model.__name__}")
+        for r in records:
+            print(r)
 
-    def nowa_Fiszka(self, question, answer):
+    def dodaj(self, *, verbose: bool = False, **data) -> T:
         try:
-            istnieje = self.session.query(Fiszka).filter_by(question=question).first()
-            if istnieje:
-                print(f"Fiszka with question '{question}' already exists.")
-                return
-
-            fiszka = Fiszka(question=question, answer=answer)
-            self.session.add(fiszka)
+            new_obj = self.model(**data)
+            self.session.add(new_obj)
             self.session.commit()
-            return fiszka
+            self.session.refresh(new_obj)
+            if verbose:
+                print(f"Dodano do {self.model.__name__}: {new_obj}")
+            return new_obj
         except Exception as e:
             self.session.rollback()
             raise e
 
-    def usun_fiszke(self, question):
+    def edytuj(self, id_record: int, *, verbose: bool = False, **data) -> bool:
         try:
-            fiszka = self.session.query(Fiszka).filter_by(question=question).first()
-            if fiszka:
-                self.session.delete(fiszka)
-                self.session.commit()
-                print(f"Deleted: {fiszka}")
-                return True
-            print(f"No Fiszka found with question '{question}'")
-            return False
-        except Exception as e:
-            self.session.rollback()
-            raise e
-
-    def usun_fiszke_po_id(self, fiszka_id):
-        try:
-            fiszka = self.session.get(Fiszka, fiszka_id)
-            if fiszka:
-                self.session.delete(fiszka)
-                self.session.commit()
-                print(f"Deleted: {fiszka}")
-        except Exception as e:
-            self.session.rollback()
-            raise e
-        else:
-            print(f"No Fiszka found with id '{fiszka_id}'")
-
-    def edytuj_fiszke(self, fiszka_id, new_question, new_answer):
-        try:
-            fiszka = self.session.get(Fiszka, fiszka_id)
-            if fiszka:
-                if new_question:
-                    fiszka.question = new_question
-                if new_answer:
-                    fiszka.answer = new_answer
-                self.session.commit()
-                print(f"Updated: {fiszka}")
-                return True
-            print(f"No Fiszka found with id '{fiszka_id}'")
-            return False
-        except Exception as e:
-            self.session.rollback()
-            raise e
-
-
-class UserCRUD:
-    def __init__(self, session):
-        self.session = session
-
-    def wypisz_uzytkownikow(self):
-        users = self.session.query(User).all()
-        print("All Users:")
-        for u in users:
-            print(u)
-
-    def nowy_uzytkownik(self, username, name, fullname):
-        try:
-            istnieje = self.session.query(User).filter_by(username=username).first()
-            if istnieje:
-                print(f"User with username '{username}' already exists.")
+            record = self.session.get(self.model, id_record)
+            if not record:
                 return False
-
-            user = User(username=username, name=name, fullname=fullname)
-            self.session.add(user)
+            for key, value in data.items():
+                if hasattr(record, key):
+                    setattr(record, key, value)
+            if verbose:
+                print(f"Zaktualizowano {self.model.__name__}: {record}")
             self.session.commit()
-            return user
+            return True
         except Exception as e:
             self.session.rollback()
             raise e
 
-    def usun_uzytkownika(self, username):
+    def usun(self, value: Union[int, str], way: str = "id", verbose: bool = False):
         try:
-            user = self.session.query(User).filter_by(username=username).first()
-            if user:
-                self.session.delete(user)
+            record = self.session.query(self.model).filter_by(**{way: value}).first()
+
+            if record:
+                self.session.delete(record)
                 self.session.commit()
-                print(f"Deleted: {user}")
+                if verbose:
+                    print(f"Deleted from {self.model.__name__}: {record}")
                 return True
-            print(f"No User found with username '{username}'")
+
+            if verbose:
+                print(f"No {self.model.__name__} found with {way}={value}")
             return False
         except Exception as e:
             self.session.rollback()
             raise e
 
-    def usun_uzytkownika_po_id(self, user_id):
-        try:
-            user = self.session.get(User, user_id)
-            if user:
-                self.session.delete(user)
-                self.session.commit()
-                print(f"Deleted: {user}")
-                return True
-            print(f"No User found with id '{user_id}'")
-            return False
-        except Exception as e:
-            self.session.rollback()
-            raise e
+    def pobierz_wszystkie(self, verbose: bool = False) -> list[T]:
+        records = self.session.query(self.model).all()
+        if verbose:
+            print(f"All {self.model.__name__}")
+            for r in records:
+                print(r)
+            
+        return records
 
-    def edytuj_uzytkownika(self, user_id, new_username, new_name, new_fullname):
-        try:
-            user = self.session.get(User, user_id)
-            if user:
-                if new_username:
-                    user.username = new_username
-                if new_name:
-                    user.name = new_name
-                if new_fullname:
-                    user.fullname = new_fullname
-                self.session.commit()
-                print(f"Updated: {user}")
-                return True
-            print(f"No User found with id '{user_id}'")
-            return False
-        except Exception as e:
-            self.session.rollback()
-            raise e
+class FiszkaCRUD(BaseCRUD[Fiszka]):
+    def __init__(self, session: Session):
+        super().__init__(session, Fiszka)
+
+    def nowa_fiszka(self, question: str, answer: str, verbose: bool = False):
+        return self.dodaj(question=question, answer=answer, verbose=verbose)
+
+class UserCRUD(BaseCRUD[User]):
+    def __init__(self, session: Session):
+        super().__init__(session, User)
+
+class ProgresCRUD(BaseCRUD[Progress]):
+    def __init__(self, session: Session): 
+        super().__init__(session, Progress)
+
+class TrainingSessionCRUD(BaseCRUD[TrainingSession]):
+    def __init__(self, session: Session): 
+        super().__init__(session, TrainingSession)
+
+    def nowa_sesja(self, user_id: int, start_time: datetime, verbose: bool = False):
+        return self.dodaj(user_id=user_id, start_time=start_time, verbose=verbose)
+
+    def zakoncz_sesja(self, session_id: int, end_time: datetime, verbose: bool = False):
+        return self.edytuj(session_id, end_time=end_time, verbose=verbose)
+
+class ReviewLogsCRUD(BaseCRUD[ReviewLogs]):
+    def __init__(self, session: Session): 
+        super().__init__(session, ReviewLogs)
+
+
+class TagCRUD(BaseCRUD[Tag]):
+    def __init__(self, session: Session): 
+        super().__init__(session, Tag)
+
+
+class ListsCRUD(BaseCRUD[Lists]):
+    def __init__(self, session: Session): 
+        super().__init__(session, Lists)
+
+
+class Tag_listsCRUD(BaseCRUD[Tag_lists]):
+    def __init__(self, session: Session): 
+        super().__init__(session, Tag_lists)
+
+class Fish_listsCRUD(BaseCRUD[Fish_lists]):
+    def __init__(self, session: Session ): 
+        super().__init__(session, Fish_lists)
+
+
+
+
+
