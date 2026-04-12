@@ -1,4 +1,4 @@
-from cli import menu
+from cli import MENU_GLOWNE, menu
 
 if __name__ == "__main__":
-    menu()
+    menu(MENU_GLOWNE, "Menu główne")
