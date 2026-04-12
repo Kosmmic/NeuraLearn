@@ -1,11 +1,43 @@
 import os
 
-from db_crud import FiszkaCRUD, UserCRUD
-from models import session
+from app.persistence import get_db_session
+from app.services import DeckBuilder, ProgressService, TrainingSessionService
+from db_crud import FiszkaCRUD, ProgressCRUD, UserCRUD
+from models import Fiszka, session
+from sqlalchemy.exc import IntegrityError
 
 
 def clear_terminal():
     os.system("cls" if os.name == "nt" else "clear")
+
+
+def handle_training_demo():
+    """Demo: talia + start/koniec sesji w bazie — bez pełnej pętli pytań."""
+    raw = input("Podaj ID użytkownika (sesja treningowa): ").strip()
+    try:
+        user_id = int(raw)
+    except ValueError:
+        print("To musi być liczba.")
+        return
+    db = get_db_session()
+    try:
+        deck = DeckBuilder(db).build_deck(user_id)
+    except ValueError as e:
+        print(e)
+        return
+    if not deck:
+        print(
+            "Talia jest pusta — ten użytkownik nie ma fiszek w nauce "
+            "(dodaj postęp w menu „Postęp nauki”)."
+        )
+    else:
+        print(f"Talia (MVP): {len(deck)} fiszek w kolejce.")
+    print(f"Talia (MVP): {len(deck)} fiszek w kolejce.")
+    svc = TrainingSessionService(db)
+    sid = svc.start_training_session(user_id)
+    print(f"Rozpoczęto sesję treningową w bazie, id={sid}")
+    svc.end_training_session(sid)
+    print("Zakończono sesję (ustawiono end_time).")
 
 
 class FiszkaCLI:
@@ -59,16 +91,117 @@ class UserCLI:
         self.db = db
 
     def handle_add_user(self):
-        pass
+        try:
+            username = input("Wprowadz Login")
+            if username.strip() == "":
+                print("Musisz podac Login")
+                return
+            email = input("Wprowadz adres email")
+            if email.strip() == "":
+                print("Musisz podac email")
+                return
+            password = input("Wprowadz hasło")
+            if password.strip() == "":
+                print("Musisz podac hasło")
+                return
+            password_hash = ""
+            username = username.strip()
+            email = email.strip()
+            self.db.dodaj(username=username, email=email, password_hash=password_hash)
+        except IntegrityError:
+            print("Login jest zajęty")
 
     def handle_delete_user(self):
-        pass
+        username = input("Podaj Login użytkownika do usunięcia")
+        ok = self.db.usun(username.strip(), way="username")
+        if not ok:
+            print(f"Nie ma uzytkownika o loginie={username}")
 
     def handle_delete_user_by_ID(self):
-        pass
+        try:
+            user_id = input("Podaj ID użytkownika do usunięcia")
+            user_id = user_id.strip()
+            user_id = int(user_id)
+            ok = self.db.usun(user_id, way="id")
+            if not ok:
+                print(f"Nie ma uzytkownika o ID: {user_id}")
+        except ValueError:
+            print("Wprowadzony tekst nie jest liczbą")
 
-    def handle_edit_ser(self):
-        pass
+    def handle_edit_user(self):
+        try:
+            user_id = int(input("Podaj ID Usera do edycji: "))
+            new_username = input(
+                "Podaj nowy Login (lub zostaw puste, aby nie zmieniać): "
+            )
+            new_email = input(
+                "Podaj nowy adres email (lub zostaw puste, aby nie zmieniać): "
+            )
+            updates = {}
+            if new_username.strip():
+                updates["username"] = new_username.strip()
+            if new_email.strip():
+                updates["email"] = new_email.strip()
+            if not updates:
+                print("Brak zmian do zapisania.")
+                return
+            if not self.db.edytuj(user_id, **updates):
+                print(f"Nie znaleziono użytkownika o ID {user_id}.")
+        except ValueError:
+            print("Nieprawidłowe ID. Proszę podać liczbę.")
+
+
+class ProgressCLI:
+    def __init__(self, db_session):
+        self._session = db_session
+        self._svc = ProgressService(db_session)
+        self._progress_crud = ProgressCRUD(db_session)
+
+    def handle_add_fiszka_to_learning(self):
+        try:
+            user_id = int(input("ID użytkownika: ").strip())
+            fiszka_id = int(input("ID fiszki (z globalnego banku): ").strip())
+        except ValueError:
+            print("ID muszą być liczbami całkowitymi.")
+            return
+        try:
+            p = self._svc.add_fiszka_for_user(user_id, fiszka_id)
+            print(f"OK — postęp: user_id={p.user_id}, fiszka_id={p.fiszka_id}")
+        except ValueError as e:
+            print(e)
+
+    def handle_add_all_fiszki_to_learning(self):
+        try:
+            user_id = int(input("ID użytkownika: ").strip())
+        except ValueError:
+            print("ID musi być liczbą całkowitą.")
+            return
+        try:
+            added, already = self._svc.add_all_fiszki_for_user(user_id)
+            print(f"Dodano nowych powiązań: {added}, już było w nauce: {already}.")
+        except ValueError as e:
+            print(e)
+
+    def handle_list_progress(self):
+        try:
+            user_id = int(input("ID użytkownika: ").strip())
+        except ValueError:
+            print("ID musi być liczbą całkowitą.")
+            return
+        rows = self._progress_crud.pobierz_dla_uzytkownika(user_id)
+        if not rows:
+            print("Brak rekordów postępu dla tego użytkownika.")
+            return
+        for p in rows:
+            f = self._session.get(Fiszka, p.fiszka_id)
+            q = f.question if f else "?"
+            print(
+                f"  fiszka_id={p.fiszka_id} | {q!r} | "
+                f"mastery={p.mastery_level} | review_date={p.review_date}"
+            )
+
+
+progress_cli = ProgressCLI(session)
 
 
 def menu(actions, title="Menu"):
@@ -117,6 +250,25 @@ MENU_USER = {
         "action": lambda: user_cli.db.wypisz_wszystkie(),
     },
     "2": {"label": "Dodaj użytkownika", "action": user_cli.handle_add_user},
+    "3": {"label": "Usuń po loginie", "action": user_cli.handle_delete_user},
+    "4": {"label": "Usuń po ID", "action": user_cli.handle_delete_user_by_ID},
+    "5": {"label": "Edytuj użytkownika", "action": user_cli.handle_edit_user},
+    "0": {"label": "Powrót", "action": None},
+}
+
+MENU_POSTEP = {
+    "1": {
+        "label": "Dodaj fiszkę do nauki użytkownika",
+        "action": progress_cli.handle_add_fiszka_to_learning,
+    },
+    "2": {
+        "label": "Dodaj wszystkie fiszki do nauki użytkownika",
+        "action": progress_cli.handle_add_all_fiszki_to_learning,
+    },
+    "3": {
+        "label": "Wyświetl postęp użytkownika",
+        "action": progress_cli.handle_list_progress,
+    },
     "0": {"label": "Powrót", "action": None},
 }
 
@@ -128,6 +280,14 @@ MENU_GLOWNE = {
     "2": {
         "label": "Zarządzaj Użytkownikami",
         "action": lambda: menu(MENU_USER, "Menu Użytkownicy"),
+    },
+    "3": {
+        "label": "Sesja treningowa (demo szkieletu)",
+        "action": handle_training_demo,
+    },
+    "4": {
+        "label": "Postęp nauki (talia użytkownika)",
+        "action": lambda: menu(MENU_POSTEP, "Postęp nauki"),
     },
     "0": {"label": "Wyjdź z programu", "action": None},
 }

@@ -1,16 +1,23 @@
+from datetime import datetime
 from typing import Generic, Type, TypeVar, Union
 
+from models import (
+    Fish_lists,
+    Fiszka,
+    Lists,
+    Progress,
+    ReviewLogs,
+    Tag,
+    Tag_lists,
+    TrainingSession,
+    User,
+)
 from sqlalchemy.orm import Session
-
-from models import Fiszka, User, Progress, TrainingSession, ReviewLogs, Tag, Lists, Tag_lists, Fish_lists
-
-from datetime import datetime
 
 T = TypeVar("T")
 
 
 class BaseCRUD(Generic[T]):
-
     def __init__(self, session: Session, model: Type[T]):
         self.session = session
         self.model = model
@@ -74,8 +81,9 @@ class BaseCRUD(Generic[T]):
             print(f"All {self.model.__name__}")
             for r in records:
                 print(r)
-            
+
         return records
+
 
 class FiszkaCRUD(BaseCRUD[Fiszka]):
     def __init__(self, session: Session):
@@ -84,16 +92,22 @@ class FiszkaCRUD(BaseCRUD[Fiszka]):
     def nowa_fiszka(self, question: str, answer: str, verbose: bool = False):
         return self.dodaj(question=question, answer=answer, verbose=verbose)
 
+
 class UserCRUD(BaseCRUD[User]):
     def __init__(self, session: Session):
         super().__init__(session, User)
 
+
 class ProgresCRUD(BaseCRUD[Progress]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, Progress)
 
+    def pobierz_dla_uzytkownika(self, user_id: int) -> list[Progress]:
+        return self.session.query(Progress).filter(Progress.user_id == user_id).all()
+
+
 class TrainingSessionCRUD(BaseCRUD[TrainingSession]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, TrainingSession)
 
     def nowa_sesja(self, user_id: int, start_time: datetime, verbose: bool = False):
@@ -102,30 +116,27 @@ class TrainingSessionCRUD(BaseCRUD[TrainingSession]):
     def zakoncz_sesja(self, session_id: int, end_time: datetime, verbose: bool = False):
         return self.edytuj(session_id, end_time=end_time, verbose=verbose)
 
+
 class ReviewLogsCRUD(BaseCRUD[ReviewLogs]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, ReviewLogs)
 
 
 class TagCRUD(BaseCRUD[Tag]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, Tag)
 
 
 class ListsCRUD(BaseCRUD[Lists]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, Lists)
 
 
 class Tag_listsCRUD(BaseCRUD[Tag_lists]):
-    def __init__(self, session: Session): 
+    def __init__(self, session: Session):
         super().__init__(session, Tag_lists)
 
+
 class Fish_listsCRUD(BaseCRUD[Fish_lists]):
-    def __init__(self, session: Session ): 
+    def __init__(self, session: Session):
         super().__init__(session, Fish_lists)
-
-
-
-
-
