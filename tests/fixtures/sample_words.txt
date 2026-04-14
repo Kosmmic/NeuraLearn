@@ -1,5 +1,0 @@
-english;polish
-hello;cześć
-hello;inne
-world;świat
-broken line without separator
