@@ -1,10 +1,19 @@
 import os
+import time
 
+from sqlalchemy.exc import IntegrityError
+
+from app.domain.answer_validation import validate_answer
 from app.persistence import get_db_session
-from app.services import DeckBuilder, ProgressService, TrainingSessionService
+from app.services import (
+    DeckBuilder,
+    ProgressService,
+    ReviewService,
+    TrainingSessionService,
+    import_fiszki_from_path,
+)
 from db_crud import FiszkaCRUD, ProgressCRUD, UserCRUD
 from models import Fiszka, session
-from sqlalchemy.exc import IntegrityError
 
 
 def clear_terminal():
@@ -12,7 +21,7 @@ def clear_terminal():
 
 
 def handle_training_demo():
-    """Demo: talia + start/koniec sesji w bazie — bez pełnej pętli pytań."""
+    """MVP: pełna pętla sesji (pytanie -> ocena -> log + update progress)."""
     raw = input("Podaj ID użytkownika (sesja treningowa): ").strip()
     try:
         user_id = int(raw)
@@ -30,14 +39,47 @@ def handle_training_demo():
             "Talia jest pusta — ten użytkownik nie ma fiszek w nauce "
             "(dodaj postęp w menu „Postęp nauki”)."
         )
-    else:
-        print(f"Talia (MVP): {len(deck)} fiszek w kolejce.")
-    print(f"Talia (MVP): {len(deck)} fiszek w kolejce.")
+        return
+
+    print(f"Talia: {len(deck)} fiszek.")
     svc = TrainingSessionService(db)
+    review_svc = ReviewService(db)
+
     sid = svc.start_training_session(user_id)
-    print(f"Rozpoczęto sesję treningową w bazie, id={sid}")
-    svc.end_training_session(sid)
-    print("Zakończono sesję (ustawiono end_time).")
+    print(f"Rozpoczęto sesję, id={sid}")
+
+    answered = 0
+    try:
+        for idx, card in enumerate(deck, start=1):
+            print(f"\n[{idx}/{len(deck)}] Pytanie: {card.question}")
+            cmd = input("Enter = odpowiedz, q = przerwij sesję: ").strip().lower()
+            if cmd == "q":
+                print("Przerwano sesję przez użytkownika.")
+                break
+            started = time.perf_counter()
+            user_answer = input("Twoja odpowiedź: ").strip()
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            # automatyczna walidacja odpowiedzi usera vs poprawna odpowiedź fiszki
+            result = validate_answer(user_answer, card.answer)
+            p = review_svc.register_review(
+                user_id=user_id,
+                fiszka_id=card.id,
+                session_id=sid,
+                is_correct=result.is_correct,
+                response_time_ms=elapsed_ms,
+            )
+            answered += 1
+            print(f"Poprawna odpowiedź: {card.answer}")
+            print("Wynik:", "OK" if result.is_correct else "BŁĄD")
+            print(
+                f"Zapisano: czas={elapsed_ms}ms, "
+                f"mastery={p.mastery_level}, next={p.review_date}"
+            )
+            # pokaz odpowiedzi "na chwilę"
+            time.sleep(1.2)
+    finally:
+        svc.end_training_session(sid)
+        print(f"Zakończono sesję id={sid}. Odpowiedziano: {answered}.")
 
 
 class FiszkaCLI:
@@ -84,6 +126,44 @@ class FiszkaCLI:
                 print(f"Nie znaleziono fiszki o ID {fiszka_id}.")
         except ValueError:
             print("Nieprawidłowe ID. Proszę podać liczbę.")
+
+    def handle_import_from_file(self):
+        """Import z pliku UTF-8 (format jak nauka_ang: ``en;pl``, opcjonalny nagłówek)."""
+        raw_path = input(
+            'Ścieżka do pliku .txt / .csv (linie: "angielskie;polskie", nagłówek opcjonalny): '
+        ).strip()
+        path = raw_path.strip('"').strip("'")
+        if not path:
+            print("Brak ścieżki — anulowano.")
+            return
+        list_name = input(
+            "Nazwa listy w bazie dla NOWYCH fiszek (Enter = tylko bank, bez listy): "
+        ).strip()
+        mode = (
+            input("Pierwsza kolumna = pytanie fiszki (EN)? [t/n, domyślnie t]: ")
+            .strip()
+            .lower()
+        )
+        english_as_question = mode != "n"
+        db = get_db_session()
+        try:
+            result = import_fiszki_from_path(
+                db,
+                path,
+                list_name=list_name or None,
+                english_as_question=english_as_question,
+            )
+        except FileNotFoundError:
+            print("Nie znaleziono pliku.")
+            return
+        except Exception as e:
+            print(f"Import nie powiódł się: {e}")
+            return
+        print(
+            f"Zakończono import: dodano {result.added}, "
+            f"pominięto duplikatów (pytanie już w bazie): {result.skipped_duplicate}, "
+            f"pominięto linii bez poprawnej pary: {result.skipped_unparsed}."
+        )
 
 
 class UserCLI:
@@ -241,6 +321,10 @@ MENU_FISZKA = {
     },
     "4": {"label": "Usuń po ID", "action": fiszka_cli.handle_delete_fiszka_by_id},
     "5": {"label": "Edytuj fiszkę", "action": fiszka_cli.handle_edit_fiszka},
+    "6": {
+        "label": "Importuj z pliku (.txt / .csv)",
+        "action": fiszka_cli.handle_import_from_file,
+    },
     "0": {"label": "Wyjdź", "action": None},
 }
 
